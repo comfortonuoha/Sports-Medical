@@ -244,6 +244,60 @@
   (var-get athlete-registration-counter)
 )
 
+;; Input Validation Helper Functions
+(define-private (is-valid-principal (input-principal principal))
+  (not (is-eq input-principal 'SP000000000000000000002Q6VF78))
+)
+
+(define-private (is-valid-string-30 (input-string (string-ascii 30)) (min-length uint))
+  (and (>= (len input-string) min-length) 
+       (not (is-eq input-string "")))
+)
+
+(define-private (is-valid-string-50 (input-string (string-ascii 50)) (min-length uint))
+  (and (>= (len input-string) min-length) 
+       (not (is-eq input-string "")))
+)
+
+(define-private (is-valid-string-100 (input-string (string-ascii 100)) (min-length uint))
+  (and (>= (len input-string) min-length) 
+       (not (is-eq input-string "")))
+)
+
+(define-private (is-valid-string-200 (input-string (string-ascii 200)) (min-length uint))
+  (and (>= (len input-string) min-length) 
+       (not (is-eq input-string "")))
+)
+
+(define-private (is-valid-string-300 (input-string (string-ascii 300)) (min-length uint))
+  (and (>= (len input-string) min-length) 
+       (not (is-eq input-string "")))
+)
+
+(define-private (is-valid-uint-range (input-value uint) (min-value uint) (max-value uint))
+  (and (>= input-value min-value) (<= input-value max-value))
+)
+
+(define-private (sanitize-string-30 (input-string (string-ascii 30)))
+  (if (> (len input-string) u0) input-string "")
+)
+
+(define-private (sanitize-string-50 (input-string (string-ascii 50)))
+  (if (> (len input-string) u0) input-string "")
+)
+
+(define-private (sanitize-string-100 (input-string (string-ascii 100)))
+  (if (> (len input-string) u0) input-string "")
+)
+
+(define-private (sanitize-string-200 (input-string (string-ascii 200)))
+  (if (> (len input-string) u0) input-string "")
+)
+
+(define-private (sanitize-string-300 (input-string (string-ascii 300)))
+  (if (> (len input-string) u0) input-string "")
+)
+
 ;; Administrative Functions
 
 ;; Initialize System (One-Time Setup)
@@ -262,41 +316,50 @@
   (professional-name (string-ascii 50))
   (medical-credentials (string-ascii 100))
   (area-of-specialization (string-ascii 50)))
-  (begin
-    (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
-    (asserts! (> (len professional-name) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> (len medical-credentials) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> (len area-of-specialization) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (is-none (map-get? medical-personnel-registry { medical-staff-principal: medical-staff-principal })) ERR-DUPLICATE-ENTRY)
-    
-    (map-set medical-personnel-registry
-      { medical-staff-principal: medical-staff-principal }
-      {
-        professional-name: professional-name,
-        medical-credentials: medical-credentials,
-        area-of-specialization: area-of-specialization,
-        authorization-principal: tx-sender,
-        authorization-block-height: block-height,
-        total-clearances-granted: u0,
-        active-staff-status: true
-      }
+  (let ((validated-principal medical-staff-principal)
+        (sanitized-name (sanitize-string-50 professional-name))
+        (sanitized-credentials (sanitize-string-100 medical-credentials))
+        (sanitized-specialization (sanitize-string-50 area-of-specialization)))
+    (begin
+      (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
+      (asserts! (is-valid-principal validated-principal) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-valid-string-50 sanitized-name u1) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-valid-string-100 sanitized-credentials u1) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-valid-string-50 sanitized-specialization u1) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-none (map-get? medical-personnel-registry { medical-staff-principal: validated-principal })) ERR-DUPLICATE-ENTRY)
+      
+      (map-set medical-personnel-registry
+        { medical-staff-principal: validated-principal }
+        {
+          professional-name: sanitized-name,
+          medical-credentials: sanitized-credentials,
+          area-of-specialization: sanitized-specialization,
+          authorization-principal: tx-sender,
+          authorization-block-height: block-height,
+          total-clearances-granted: u0,
+          active-staff-status: true
+        }
+      )
+      (ok true)
     )
-    (ok true)
   )
 )
 
 ;; Deactivate Medical Personnel
 (define-public (deactivate-medical-personnel (medical-staff-principal principal))
-  (begin
-    (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
-    (match (get-medical-personnel-information medical-staff-principal)
-      staff-information (map-set medical-personnel-registry
-        { medical-staff-principal: medical-staff-principal }
-        (merge staff-information { active-staff-status: false })
+  (let ((validated-principal medical-staff-principal))
+    (begin
+      (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
+      (asserts! (is-valid-principal validated-principal) ERR-INVALID-INPUT-DATA)
+      (match (get-medical-personnel-information validated-principal)
+        staff-information (map-set medical-personnel-registry
+          { medical-staff-principal: validated-principal }
+          (merge staff-information { active-staff-status: false })
+        )
+        false
       )
-      false
+      (ok true)
     )
-    (ok true)
   )
 )
 
@@ -309,24 +372,28 @@
   (team-affiliation (string-ascii 50))
   (playing-position (string-ascii 30))
   (birth-date uint))
-  (let ((athlete-identification-number (var-get athlete-registration-counter)))
+  (let ((athlete-identification-number (var-get athlete-registration-counter))
+        (sanitized-name (sanitize-string-50 full-name))
+        (sanitized-sport (sanitize-string-30 sport-discipline))
+        (sanitized-team (sanitize-string-50 team-affiliation))
+        (sanitized-position (sanitize-string-30 playing-position)))
     ;; Input Validation
     (asserts! (is-none (map-get? principal-to-athlete-mapping { wallet-address: tx-sender })) ERR-DUPLICATE-ENTRY)
-    (asserts! (> (len full-name) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> (len sport-discipline) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> (len team-affiliation) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> birth-date u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (<= birth-date block-height) ERR-FUTURE-DATE-NOT-ALLOWED)
+    (asserts! (is-valid-string-50 sanitized-name u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-string-30 sanitized-sport u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-string-50 sanitized-team u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-string-30 sanitized-position u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-uint-range birth-date u1 block-height) ERR-INVALID-INPUT-DATA)
     
     ;; Create Athlete Profile Record
     (map-set athlete-profile-registry
       { athlete-identification-number: athlete-identification-number }
       {
-        full-name: full-name,
-        sport-discipline: sport-discipline,
-        team-affiliation: team-affiliation,
+        full-name: sanitized-name,
+        sport-discipline: sanitized-sport,
+        team-affiliation: sanitized-team,
         birth-date: birth-date,
-        playing-position: playing-position,
+        playing-position: sanitized-position,
         medical-clearance-status: true,
         registration-principal: tx-sender,
         registration-block-height: block-height,
@@ -343,7 +410,7 @@
     )
     
     ;; Update Team Performance Analytics
-    (update-team-performance-statistics team-affiliation 1 u0 u0 u0 u0)
+    (update-team-performance-statistics sanitized-team 1 u0 u0 u0 u0)
     
     ;; Increment Athlete Registration Counter
     (var-set athlete-registration-counter (+ athlete-identification-number u1))
@@ -357,41 +424,47 @@
   (sport-discipline (string-ascii 30))
   (team-affiliation (string-ascii 50))
   (playing-position (string-ascii 30)))
-  (begin
-    (match (map-get? principal-to-athlete-mapping { wallet-address: tx-sender })
-      athlete-mapping-data
-        (let ((athlete-identification-number (get athlete-identification-number athlete-mapping-data)))
-          (asserts! (> (len full-name) u0) ERR-INVALID-INPUT-DATA)
-          (asserts! (> (len sport-discipline) u0) ERR-INVALID-INPUT-DATA)
-          (asserts! (> (len team-affiliation) u0) ERR-INVALID-INPUT-DATA)
-          
-          (match (get-athlete-profile-by-id athlete-identification-number)
-            current-profile-data
-              (let ((previous-team-affiliation (get team-affiliation current-profile-data)))
-                (map-set athlete-profile-registry
-                  { athlete-identification-number: athlete-identification-number }
-                  (merge current-profile-data {
-                    full-name: full-name,
-                    sport-discipline: sport-discipline,
-                    team-affiliation: team-affiliation,
-                    playing-position: playing-position
-                  })
-                )
-                
-                ;; Update Team Statistics if Team Changed
-                (if (not (is-eq previous-team-affiliation team-affiliation))
-                  (begin
-                    (update-team-performance-statistics previous-team-affiliation -1 u0 u0 u0 u0)
-                    (update-team-performance-statistics team-affiliation 1 u0 u0 u0 u0)
+  (let ((sanitized-name (sanitize-string-50 full-name))
+        (sanitized-sport (sanitize-string-30 sport-discipline))
+        (sanitized-team (sanitize-string-50 team-affiliation))
+        (sanitized-position (sanitize-string-30 playing-position)))
+    (begin
+      (match (map-get? principal-to-athlete-mapping { wallet-address: tx-sender })
+        athlete-mapping-data
+          (let ((athlete-identification-number (get athlete-identification-number athlete-mapping-data)))
+            (asserts! (is-valid-string-50 sanitized-name u1) ERR-INVALID-INPUT-DATA)
+            (asserts! (is-valid-string-30 sanitized-sport u1) ERR-INVALID-INPUT-DATA)
+            (asserts! (is-valid-string-50 sanitized-team u1) ERR-INVALID-INPUT-DATA)
+            (asserts! (is-valid-string-30 sanitized-position u1) ERR-INVALID-INPUT-DATA)
+            
+            (match (get-athlete-profile-by-id athlete-identification-number)
+              current-profile-data
+                (let ((previous-team-affiliation (get team-affiliation current-profile-data)))
+                  (map-set athlete-profile-registry
+                    { athlete-identification-number: athlete-identification-number }
+                    (merge current-profile-data {
+                      full-name: sanitized-name,
+                      sport-discipline: sanitized-sport,
+                      team-affiliation: sanitized-team,
+                      playing-position: sanitized-position
+                    })
                   )
-                  true
+                  
+                  ;; Update Team Statistics if Team Changed
+                  (if (not (is-eq previous-team-affiliation sanitized-team))
+                    (begin
+                      (update-team-performance-statistics previous-team-affiliation -1 u0 u0 u0 u0)
+                      (update-team-performance-statistics sanitized-team 1 u0 u0 u0 u0)
+                    )
+                    true
+                  )
                 )
-              )
-            false
+              false
+            )
+            (ok true)
           )
-          (ok true)
-        )
-      ERR-RECORD-NOT-FOUND
+        ERR-RECORD-NOT-FOUND
+      )
     )
   )
 )
@@ -407,25 +480,28 @@
   (incident-occurrence-date uint)
   (detailed-description (string-ascii 200))
   (follow-up-treatment-required bool))
-  (let ((injury-record-identifier (var-get injury-record-counter)))
+  (let ((injury-record-identifier (var-get injury-record-counter))
+        (sanitized-classification (sanitize-string-50 injury-classification))
+        (sanitized-body-region (sanitize-string-30 affected-body-region))
+        (sanitized-description (sanitize-string-200 detailed-description)))
     ;; Input Validation
     (asserts! (is-some (get-athlete-profile-by-id athlete-identification-number)) ERR-RECORD-NOT-FOUND)
-    (asserts! (> (len injury-classification) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (> (len affected-body-region) u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (and (>= severity-assessment u1) (<= severity-assessment u10)) ERR-INVALID-SEVERITY-LEVEL)
-    (asserts! (> incident-occurrence-date u0) ERR-INVALID-INPUT-DATA)
-    (asserts! (<= incident-occurrence-date block-height) ERR-FUTURE-DATE-NOT-ALLOWED)
+    (asserts! (is-valid-string-50 sanitized-classification u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-string-30 sanitized-body-region u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-string-200 sanitized-description u1) ERR-INVALID-INPUT-DATA)
+    (asserts! (is-valid-uint-range severity-assessment u1 u10) ERR-INVALID-SEVERITY-LEVEL)
+    (asserts! (is-valid-uint-range incident-occurrence-date u1 block-height) ERR-INVALID-INPUT-DATA)
     
     ;; Create Injury Documentation Record
     (map-set injury-documentation-registry
       { injury-record-identifier: injury-record-identifier }
       {
         athlete-identification-number: athlete-identification-number,
-        injury-classification: injury-classification,
-        affected-body-region: affected-body-region,
+        injury-classification: sanitized-classification,
+        affected-body-region: sanitized-body-region,
         severity-assessment: severity-assessment,
         incident-occurrence-date: incident-occurrence-date,
-        detailed-description: detailed-description,
+        detailed-description: sanitized-description,
         reporting-principal: tx-sender,
         report-submission-date: block-height,
         medical-clearance-granted: false,
@@ -455,7 +531,7 @@
           ;; Update Team Performance Analytics
           (update-team-injury-analytics (get team-affiliation athlete-profile-data) 
                                        (get sport-discipline athlete-profile-data) 
-                                       affected-body-region 
+                                       sanitized-body-region 
                                        severity-assessment)
         )
       false
@@ -466,7 +542,7 @@
     (var-set injury-record-counter (+ injury-record-identifier u1))
     
     ;; Update Injury Analytics
-    (update-injury-classification-frequency injury-classification severity-assessment)
+    (update-injury-classification-frequency sanitized-classification severity-assessment)
     (update-monthly-injury-analytics incident-occurrence-date severity-assessment)
     
     (ok injury-record-identifier)
@@ -478,59 +554,64 @@
   (injury-record-identifier uint) 
   (estimated-recovery-duration uint) 
   (medical-treatment-notes (string-ascii 300)))
-  (begin
-    (asserts! (verify-medical-staff-authorization tx-sender) ERR-UNAUTHORIZED-ACCESS)
-    
-    (match (get-injury-documentation injury-record-identifier)
-      injury-documentation-data
-        (let ((athlete-identification-number (get athlete-identification-number injury-documentation-data)))
-          ;; Update Injury Clearance Status
-          (map-set injury-documentation-registry
-            { injury-record-identifier: injury-record-identifier }
-            (merge injury-documentation-data {
-              medical-clearance-granted: true,
-              clearance-approval-date: (some block-height),
-              approving-medical-staff: (some tx-sender),
-              estimated-recovery-duration: (some estimated-recovery-duration),
-              medical-treatment-notes: (some medical-treatment-notes)
-            })
-          )
-          
-          ;; Update Athlete Active Injury Count
-          (match (get-athlete-profile-by-id athlete-identification-number)
-            athlete-profile-data
-              (let ((updated-active-count (- (get current-active-injury-count athlete-profile-data) u1)))
-                (map-set athlete-profile-registry
-                  { athlete-identification-number: athlete-identification-number }
-                  (merge athlete-profile-data {
-                    current-active-injury-count: updated-active-count,
-                    medical-clearance-status: (is-eq updated-active-count u0)
-                  })
-                )
-                
-                ;; Update Team Statistics
-                (update-team-clearance-analytics (get team-affiliation athlete-profile-data))
-              )
-            false
-          )
-          
-          ;; Update Medical Staff Performance
-          (match (get-medical-personnel-information tx-sender)
-            staff-information (map-set medical-personnel-registry
-              { medical-staff-principal: tx-sender }
-              (merge staff-information {
-                total-clearances-granted: (+ (get total-clearances-granted staff-information) u1)
+  (let ((validated-record-id injury-record-identifier)
+        (sanitized-notes (sanitize-string-300 medical-treatment-notes)))
+    (begin
+      (asserts! (verify-medical-staff-authorization tx-sender) ERR-UNAUTHORIZED-ACCESS)
+      (asserts! (is-valid-uint-range validated-record-id u1 (var-get injury-record-counter)) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-valid-string-300 sanitized-notes u1) ERR-INVALID-INPUT-DATA)
+      
+      (match (get-injury-documentation validated-record-id)
+        injury-documentation-data
+          (let ((athlete-identification-number (get athlete-identification-number injury-documentation-data)))
+            ;; Update Injury Clearance Status
+            (map-set injury-documentation-registry
+              { injury-record-identifier: validated-record-id }
+              (merge injury-documentation-data {
+                medical-clearance-granted: true,
+                clearance-approval-date: (some block-height),
+                approving-medical-staff: (some tx-sender),
+                estimated-recovery-duration: (some estimated-recovery-duration),
+                medical-treatment-notes: (some sanitized-notes)
               })
             )
-            false
+            
+            ;; Update Athlete Active Injury Count
+            (match (get-athlete-profile-by-id athlete-identification-number)
+              athlete-profile-data
+                (let ((updated-active-count (- (get current-active-injury-count athlete-profile-data) u1)))
+                  (map-set athlete-profile-registry
+                    { athlete-identification-number: athlete-identification-number }
+                    (merge athlete-profile-data {
+                      current-active-injury-count: updated-active-count,
+                      medical-clearance-status: (is-eq updated-active-count u0)
+                    })
+                  )
+                  
+                  ;; Update Team Statistics
+                  (update-team-clearance-analytics (get team-affiliation athlete-profile-data))
+                )
+              false
+            )
+            
+            ;; Update Medical Staff Performance
+            (match (get-medical-personnel-information tx-sender)
+              staff-information (map-set medical-personnel-registry
+                { medical-staff-principal: tx-sender }
+                (merge staff-information {
+                  total-clearances-granted: (+ (get total-clearances-granted staff-information) u1)
+                })
+              )
+              false
+            )
+            
+            ;; Update Global Cleared Injuries Counter
+            (var-set total-cleared-injury-count (+ (var-get total-cleared-injury-count) u1))
+            
+            (ok true)
           )
-          
-          ;; Update Global Cleared Injuries Counter
-          (var-set total-cleared-injury-count (+ (var-get total-cleared-injury-count) u1))
-          
-          (ok true)
-        )
-      ERR-RECORD-NOT-FOUND
+        ERR-RECORD-NOT-FOUND
+      )
     )
   )
 )
@@ -539,30 +620,34 @@
 
 ;; Generate Team Performance Analytics Report
 (define-public (generate-team-performance-report (team-name-identifier (string-ascii 50)))
-  (let ((team-metrics-data (get-team-performance-metrics team-name-identifier))
+  (let ((validated-team-name (sanitize-string-50 team-name-identifier))
+        (team-metrics-data (get-team-performance-metrics validated-team-name))
         (system-statistics (generate-system-statistics-report)))
-    (if (is-some team-metrics-data)
-      (let ((metrics (unwrap-panic team-metrics-data)))
-        (ok {
-          team-identifier: team-name-identifier,
-          team-injury-frequency-rate: (if (> (get registered-athlete-count metrics) u0)
-            (/ (* (get total-team-injury-count metrics) PERCENTAGE-MULTIPLIER) (get registered-athlete-count metrics))
-            u0),
-          team-clearance-success-rate: (if (> (get total-team-injury-count metrics) u0)
-            (/ (* (get successfully-cleared-injury-count metrics) PERCENTAGE-MULTIPLIER) (get total-team-injury-count metrics))
-            u0),
-          high-risk-athlete-percentage: (if (> (get registered-athlete-count metrics) u0)
-            (/ (* (get high-risk-athlete-count metrics) PERCENTAGE-MULTIPLIER) (get registered-athlete-count metrics))
-            u0),
-          performance-comparison: {
-            above-system-average: (> (get total-team-injury-count metrics) 
-              (/ (get total-recorded-injuries system-statistics) 
-                 (calculate-maximum-value (get total-registered-athletes system-statistics) u1))),
-            last-analytics-update: (get last-statistics-update metrics)
-          }
-        })
+    (begin
+      (asserts! (is-valid-string-50 validated-team-name u1) ERR-INVALID-INPUT-DATA)
+      (if (is-some team-metrics-data)
+        (let ((metrics (unwrap-panic team-metrics-data)))
+          (ok {
+            team-identifier: validated-team-name,
+            team-injury-frequency-rate: (if (> (get registered-athlete-count metrics) u0)
+              (/ (* (get total-team-injury-count metrics) PERCENTAGE-MULTIPLIER) (get registered-athlete-count metrics))
+              u0),
+            team-clearance-success-rate: (if (> (get total-team-injury-count metrics) u0)
+              (/ (* (get successfully-cleared-injury-count metrics) PERCENTAGE-MULTIPLIER) (get total-team-injury-count metrics))
+              u0),
+            high-risk-athlete-percentage: (if (> (get registered-athlete-count metrics) u0)
+              (/ (* (get high-risk-athlete-count metrics) PERCENTAGE-MULTIPLIER) (get registered-athlete-count metrics))
+              u0),
+            performance-comparison: {
+              above-system-average: (> (get total-team-injury-count metrics) 
+                (/ (get total-recorded-injuries system-statistics) 
+                   (calculate-maximum-value (get total-registered-athletes system-statistics) u1))),
+              last-analytics-update: (get last-statistics-update metrics)
+            }
+          })
+        )
+        ERR-RECORD-NOT-FOUND
       )
-      ERR-RECORD-NOT-FOUND
     )
   )
 )
@@ -577,7 +662,8 @@
   (active-injury-delta uint)
   (cleared-injury-delta uint)
   (high-risk-athlete-delta uint))
-  (let ((current-team-statistics (default-to
+  (let ((validated-team-name (sanitize-string-50 team-name-identifier))
+        (current-team-statistics (default-to
     {
       registered-athlete-count: u0,
       total-team-injury-count: u0,
@@ -586,9 +672,9 @@
       high-risk-athlete-count: u0,
       last-statistics-update: u0
     }
-    (get-team-performance-metrics team-name-identifier))))
+    (get-team-performance-metrics validated-team-name))))
     (map-set team-performance-analytics
-      { team-name-identifier: team-name-identifier }
+      { team-name-identifier: validated-team-name }
       {
         registered-athlete-count: (if (>= athlete-count-delta 0)
           (+ (get registered-athlete-count current-team-statistics) (to-uint athlete-count-delta))
@@ -759,27 +845,30 @@
 (define-public (batch-update-team-statistics 
   (team-name-identifier (string-ascii 50))
   (force-recalculation bool))
-  (begin
-    (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
-    
-    ;; Force recalculation of team statistics if requested
-    (if force-recalculation
-      (let ((reset-statistics {
-        registered-athlete-count: u0,
-        total-team-injury-count: u0,
-        current-active-injury-count: u0,
-        successfully-cleared-injury-count: u0,
-        high-risk-athlete-count: u0,
-        last-statistics-update: block-height
-      }))
-        (map-set team-performance-analytics
-          { team-name-identifier: team-name-identifier }
-          reset-statistics
+  (let ((validated-team-name (sanitize-string-50 team-name-identifier)))
+    (begin
+      (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
+      (asserts! (is-valid-string-50 validated-team-name u1) ERR-INVALID-INPUT-DATA)
+      
+      ;; Force recalculation of team statistics if requested
+      (if force-recalculation
+        (let ((reset-statistics {
+          registered-athlete-count: u0,
+          total-team-injury-count: u0,
+          current-active-injury-count: u0,
+          successfully-cleared-injury-count: u0,
+          high-risk-athlete-count: u0,
+          last-statistics-update: block-height
+        }))
+          (map-set team-performance-analytics
+            { team-name-identifier: validated-team-name }
+            reset-statistics
+          )
         )
+        true
       )
-      true
+      (ok true)
     )
-    (ok true)
   )
 )
 
@@ -787,66 +876,73 @@
 (define-public (emergency-medical-clearance-override 
   (injury-record-identifier uint)
   (override-reason (string-ascii 200)))
-  (begin
-    (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
-    (asserts! (> (len override-reason) u0) ERR-INVALID-INPUT-DATA)
-    
-    (match (get-injury-documentation injury-record-identifier)
-      injury-documentation-data
-        (let ((athlete-identification-number (get athlete-identification-number injury-documentation-data)))
-          ;; Force clearance with override
-          (map-set injury-documentation-registry
-            { injury-record-identifier: injury-record-identifier }
-            (merge injury-documentation-data {
-              medical-clearance-granted: true,
-              clearance-approval-date: (some block-height),
-              approving-medical-staff: (some tx-sender),
-              estimated-recovery-duration: (some u0),
-              medical-treatment-notes: (some override-reason)
-            })
-          )
-          
-          ;; Update athlete clearance status
-          (match (get-athlete-profile-by-id athlete-identification-number)
-            athlete-profile-data
-              (let ((updated-active-count (- (get current-active-injury-count athlete-profile-data) u1)))
-                (map-set athlete-profile-registry
-                  { athlete-identification-number: athlete-identification-number }
-                  (merge athlete-profile-data {
-                    current-active-injury-count: updated-active-count,
-                    medical-clearance-status: (is-eq updated-active-count u0)
-                  })
+  (let ((validated-record-id injury-record-identifier)
+        (sanitized-reason (sanitize-string-200 override-reason)))
+    (begin
+      (asserts! (is-eq tx-sender CONTRACT-ADMINISTRATOR) ERR-OWNER-ONLY)
+      (asserts! (is-valid-uint-range validated-record-id u1 (var-get injury-record-counter)) ERR-INVALID-INPUT-DATA)
+      (asserts! (is-valid-string-200 sanitized-reason u1) ERR-INVALID-INPUT-DATA)
+      
+      (match (get-injury-documentation validated-record-id)
+        injury-documentation-data
+          (let ((athlete-identification-number (get athlete-identification-number injury-documentation-data)))
+            ;; Force clearance with override
+            (map-set injury-documentation-registry
+              { injury-record-identifier: validated-record-id }
+              (merge injury-documentation-data {
+                medical-clearance-granted: true,
+                clearance-approval-date: (some block-height),
+                approving-medical-staff: (some tx-sender),
+                estimated-recovery-duration: (some u0),
+                medical-treatment-notes: (some sanitized-reason)
+              })
+            )
+            
+            ;; Update athlete clearance status
+            (match (get-athlete-profile-by-id athlete-identification-number)
+              athlete-profile-data
+                (let ((updated-active-count (- (get current-active-injury-count athlete-profile-data) u1)))
+                  (map-set athlete-profile-registry
+                    { athlete-identification-number: athlete-identification-number }
+                    (merge athlete-profile-data {
+                      current-active-injury-count: updated-active-count,
+                      medical-clearance-status: (is-eq updated-active-count u0)
+                    })
+                  )
                 )
-              )
-            false
+              false
+            )
+            
+            (var-set total-cleared-injury-count (+ (var-get total-cleared-injury-count) u1))
+            (ok true)
           )
-          
-          (var-set total-cleared-injury-count (+ (var-get total-cleared-injury-count) u1))
-          (ok true)
-        )
-      ERR-RECORD-NOT-FOUND
+        ERR-RECORD-NOT-FOUND
+      )
     )
   )
 )
 
 ;; Bulk Athlete Risk Assessment
 (define-public (perform-bulk-athlete-risk-assessment (team-name-identifier (string-ascii 50)))
-  (begin
-    (asserts! (verify-medical-staff-authorization tx-sender) ERR-UNAUTHORIZED-ACCESS)
-    
-    ;; Update high-risk athlete count for team
-    (match (get-team-performance-metrics team-name-identifier)
-      team-metrics
-        (let ((updated-metrics (merge team-metrics {
-          last-statistics-update: block-height
-        })))
-          (map-set team-performance-analytics
-            { team-name-identifier: team-name-identifier }
-            updated-metrics
+  (let ((validated-team-name (sanitize-string-50 team-name-identifier)))
+    (begin
+      (asserts! (verify-medical-staff-authorization tx-sender) ERR-UNAUTHORIZED-ACCESS)
+      (asserts! (is-valid-string-50 validated-team-name u1) ERR-INVALID-INPUT-DATA)
+      
+      ;; Update high-risk athlete count for team
+      (match (get-team-performance-metrics validated-team-name)
+        team-metrics
+          (let ((updated-metrics (merge team-metrics {
+            last-statistics-update: block-height
+          })))
+            (map-set team-performance-analytics
+              { team-name-identifier: validated-team-name }
+              updated-metrics
+            )
+            (ok (get high-risk-athlete-count updated-metrics))
           )
-          (ok (get high-risk-athlete-count updated-metrics))
-        )
-      ERR-RECORD-NOT-FOUND
+        ERR-RECORD-NOT-FOUND
+      )
     )
   )
 )
